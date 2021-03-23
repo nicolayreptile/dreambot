@@ -8,10 +8,10 @@ class Redis:
     STATE_KEY = 'state'
     DATA_KEY = 'data'
     POLL_KEY = 'poll'
+    MSG_KEY = 'message'
 
-    def __init__(self, host: str, port: int = 6379, db: int = 0, key_prefix: typing.Optional[str] = None):
-        self._host = host
-        self._port = port
+    def __init__(self, redis_url: str, db: int = 0, key_prefix: typing.Optional[str] = None):
+        self._address = redis_url
         self._db = db
 
         self._prefix = (key_prefix, )
@@ -26,7 +26,7 @@ class Redis:
     async def redis(self):
         async with self._connection_lock:
             if self._redis is None or self._redis.closed:
-                self._redis = await aioredis.create_redis_pool(self._host,
+                self._redis = await aioredis.create_redis_pool(self._address,
                                                                db=self._db,
                                                                encoding='utf-8')
         return self._redis
@@ -63,7 +63,7 @@ class Redis:
             return json.loads(raw_result)
         return {}
 
-    async def set_data(self, user: int, chat: int, data: dict):
+    async def set_data(self, user: int, chat: int, data: typing.Dict):
         """
         Data stored as:
         {
@@ -85,18 +85,36 @@ class Redis:
         data = json.dumps(data)
         return await redis.set(key, data, expire=self._ttl)
 
-    async def get_poll_info(self, poll: int):
-        key = self.get_key(poll, self.POLL_KEY)
+    async def get_poll_info(self ,user: int, chat: int, current: int, ):
+        key = self.get_key(user, chat, current, self.POLL_KEY)
         redis = await self.redis()
         data = await redis.get(key, encoding='utf-8')
         data = json.loads(data) if data else {}
         return data
 
-    async def set_poll_info(self, poll: int, data: dict):
-        key = self.get_key(poll, self.POLL_KEY)
+    async def set_poll_info(self, user: int, chat: int, current: int, data: typing.Dict):
+        key = self.get_key(user, chat, current, self.POLL_KEY)
         data = json.dumps(data)
         redis = await self.redis()
         await redis.set(key, data, expire=self._ttl)
+
+    async def update_msg_history(self, user: int, chat: int, msg_id: int):
+        key = self.get_key(user, chat, self.MSG_KEY)
+        redis = await self.redis()
+        data = await redis.get(key)
+        history = json.loads(data) if data else []
+        history.append(msg_id)
+        data = json.dumps(history)
+        await redis.set(key, data)
+
+    async def get_msg_history(self, user: int, chat: int):
+        key = self.get_key(user, chat, self.MSG_KEY)
+        redis = await self.redis()
+        data = await redis.get(key)
+        history = json.loads(data) if data else []
+        history = list(map(int, history))
+        await redis.delete(key)
+        return history
 
     async def delete(self, user: int, chat: int):
         key_state = self.get_key(user, chat, self.STATE_KEY)
@@ -108,10 +126,10 @@ class Redis:
         redis = await self.redis()
         return await redis.flushall()
 
-    async def set_from(self, form: dict):
+    async def set_from(self, form: typing.Dict):
         data = json.dumps(form)
         redis = await self.redis()
-        await redis.set('form', data)
+        await redis.set('form', data, expire=self._ttl)
 
     async def get_form(self):
         redis = await self.redis()

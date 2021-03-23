@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  redis:
+    image: redis
+    ports:
+      - "6479:6379"
+  bot:
+    build: .
+    command: python main.py
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_KEY=1616241319:AAErOd7tio50JSGsC8l4dS-d6FfNBH25Axc
+      - SPREADSHEET_ID=1QMoJzkN4YjkbIZySD1JWEcMdLVn5Lbb3y5wp55KuD7k
+      - FORM_URL=https://docs.google.com/forms/d/17CNIRXvokAmZjBzJnAA7yd-pUq12SYtIufPzqigayLs/edit
+      - SCRIPT_ID=1CzPThriuR90-kVggk4RnsnMC4QLyY1WUYKOKtm3x5FT3SmpXpt5mFuK2
+    depends_on:
+      - redis

@@ -2,7 +2,10 @@ import os
 import pickle
 import logging
 import dotenv
+import json
 from typing import List
+
+from aiofile import async_open
 
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -20,6 +23,7 @@ class Doc:
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
               'https://www.googleapis.com/auth/forms',
               'https://www.googleapis.com/auth/script.projects']
+    FILENAME = 'questions_new.json'
 
     def __init__(self):
         self.SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID')
@@ -46,13 +50,20 @@ class Doc:
             "devMode": True,
             "parameters": self.FORM_URL
         }
-        response = service.scripts().run(scriptId=Doc.SCRIPT_ID, body=body).execute()
+        response = service.scripts().run(scriptId=self.SCRIPT_ID, body=body).execute()
         if not response['done']:
             logging.fatal(msg='Не удалось загрузить вопросы')
             return None
         form = response['response']['result']
         await redis.set_from(form)
         return form
+
+    async def get_data(self):
+        async with async_open(self.FILENAME, 'r') as f:
+            data = await f.read()
+        data = json.loads(data)
+        return data
+
 
     def get_service(self, service_name: str, version: str):
         creds = None

@@ -15,6 +15,27 @@ class NextQuestionFilter(Filter):
         return query.data == buttons.NEXT.callback_data
 
 
+class SkipFilter(Filter):
+    async def check(self, query: CallbackQuery) -> bool:
+        return query.data == buttons.SKIP.callback_data
+
+
+class SubmitFilter(Filter):
+    async def check(self, query: CallbackQuery) -> bool:
+        return query.data == buttons.SUBMIT.callback_data
+
+
 class EndPollFilter(Filter):
     async def check(self, query: CallbackQuery) -> bool:
         return query.data == buttons.END.callback_data
+
+
+class PollNavFilter(Filter):
+    async def check(self, query: CallbackQuery) -> bool:
+        return query.data == buttons.POLL_NEXT.callback_data or \
+               query.data == buttons.POLL_PREVIOUS.callback_data
+
+
+class PollOptionFilter(Filter):
+    async def check(self, query: CallbackQuery) -> bool:
+        return
