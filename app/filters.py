@@ -15,9 +15,9 @@ class NextQuestionFilter(Filter):
         return query.data == buttons.NEXT.callback_data
 
 
-class SkipFilter(Filter):
+class PreviousQuestionFilter(Filter):
     async def check(self, query: CallbackQuery) -> bool:
-        return query.data == buttons.SKIP.callback_data
+        return query.data == buttons.PREVIOUS.callback_data
 
 
 class SubmitFilter(Filter):

@@ -15,25 +15,44 @@ Response = Union[types.Message, types.PollAnswer, types.InlineQuery, types.Callb
 class Base:
     is_first_only = False
     template: str
+    is_last = False
+
+    def __init__(self, index: int, required: bool = True, first_time_only: bool = False):
+        self.index = index
+        self.required = required
+        self.first_time_only = first_time_only
 
     async def action(self, bot: Bot, chat_id: int):
         raise NotImplementedError()
+
+    @property
+    def nav_panel(self):
+        if not self.is_last:
+            if not self.required:
+                if self.index:
+                    return inline_markup.full_nav
+                else:
+                    return inline_markup.forward_nav
+            elif self.index:
+                return inline_markup.back_nav
 
 
 class Question(Base):
     template = '{0}\n{1}'
 
-    def __init__(self, text: str, help_text: str, index: int,
-                 required: bool = True, first_time_only: bool = False):
-        self.name = 'QUESTION_{0}'.format(index)
+    def __init__(self, text: str, help_text: str, *args):
+        super().__init__(*args)
+        self.name = 'QUESTION_{0}'.format(self.index)
         self.text = self.template.format(text, help_text)
-        self.required = required
-        self.first_time_only = first_time_only
 
     async def action(self, bot: Bot, chat_id: int) -> types.Message:
+        reply_markup = None
+        if self.nav_panel:
+            reply_markup = InlineKeyboardMarkup(self.nav_panel)
         return await bot.send_message(
             chat_id=chat_id,
-            text=self.text
+            text=self.text,
+            reply_markup=reply_markup
         )
 
 
@@ -49,9 +68,9 @@ class Poll(Base):
     r_pattern_option = r'OPTION_([0-9]*)'
 
     def __init__(self, text: str, help_text: str, options: List[str],
-                 has_other: bool = False,
-                 index: int = 0):
-        self.name = 'POLL_{0}'.format(index)
+                 has_other: bool = False, *args):
+        super(Poll, self).__init__(*args)
+        self.name = 'POLL_{0}'.format(self.index)
         self.text = self.template.format(text)
         self.help_text = help_text
         self.options = {}
@@ -93,6 +112,9 @@ class Poll(Base):
         if nav_buttons:
             buttons.append(nav_buttons)
         buttons.append([inline_markup.buttons.SUBMIT])
+        if self.nav_panel:
+            buttons.append(self.nav_panel)
+
         return InlineKeyboardMarkup(row_width=self.row_width, inline_keyboard=buttons)
 
     def change_option_state(self, msg: types.CallbackQuery, callback_data_checked: str, status: bool) -> InlineKeyboardMarkup:
@@ -123,7 +145,7 @@ class Poll(Base):
 
     @staticmethod
     def poll_data(index: int, user: int, chat: int,
-                  msg_id: int, offset: int, options_status: Dict) -> Dict:
+                  msg_id: int, offset: int, options_status: dict) -> dict:
         return {
             'index': index,
             'user': user,
@@ -137,7 +159,7 @@ class Poll(Base):
                      chat_id: int,
                      offset: int = 0,
                      msg_id: Optional[int] = None,
-                     options_status: Optional[Dict] = None) -> types.Message:
+                     options_status: Optional[dict] = None) -> types.Message:
         if msg_id:
             return await bot.edit_message_reply_markup(
                 chat_id=chat_id,
@@ -149,27 +171,16 @@ class Poll(Base):
             text=self.text,
             reply_markup=self.keyboard(offset),
         )
-        # if not offset:
-        #     await bot.send_message(
-        #         chat_id=chat_id,
-        #         text=self.text,
-        #     )
-        # return await bot.send_poll(
-        #     chat_id=chat_id,
-        #     question=self.help_text,
-        #     options=self.options[offset],
-        #     allows_multiple_answers=True
-        # )
 
 
 class ButtonPoll(Base):
-    template = '<b>{0}</b>\n{1}'
+    template = '{0}\n{1}'
 
-    def __init__(self, text: str, help_text: str, options: List[str],
-                 has_other: bool = False,
-                 index: int = 0):
+    def __init__(self, text: str, help_text: str, options: list[str],
+                 has_other: bool = False, *args):
+        super(ButtonPoll, self).__init__(*args)
         self.text = self.template.format(text, help_text or '')
-        self.name = 'POLL_{0}'.format(index)
+        self.name = 'POLL_{0}'.format(self.index)
         self.options = {}
         buttons = []
         if has_other:
@@ -179,6 +190,8 @@ class ButtonPoll(Base):
             btn = InlineKeyboardButton(text=option, callback_data=key)
             self.options[key] = option
             buttons.append([btn])
+        if self.nav_panel:
+            buttons.append(self.nav_panel)
         self.keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def action(self, bot: Bot, chat_id: int) -> types.Message:
@@ -208,14 +221,15 @@ class Pool:
             if type_ in ('PARAGRAPH_TEXT', 'TEXT', ):
                 elem = Question(text, help_text, index, required, first_time_only)
             elif type_ == 'CHECKBOX':
-                elem = Poll(text, help_text, options, has_other, index)
+                elem = Poll(text, help_text, options, has_other, index, required, first_time_only)
             elif type_ == 'MULTIPLE_CHOICE':
-                elem = ButtonPoll(text, help_text, options, has_other, index)
+                elem = ButtonPoll(text, help_text, options, has_other, index, required, first_time_only)
             self.pool[index] = elem
         self.end = len(self) - 1
+        self[self.end].is_last = True
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> Optional[Union[ButtonPoll, Poll, Question]]:
         return self.pool.get(index)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.pool)

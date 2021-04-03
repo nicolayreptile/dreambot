@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import typing
 import json
 import asyncio
@@ -9,6 +10,8 @@ class Redis:
     DATA_KEY = 'data'
     POLL_KEY = 'poll'
     MSG_KEY = 'message'
+    TABLE_ROW_KEY = 'row'
+    USERS_KEY = 'user'
 
     def __init__(self, redis_url: str, db: int = 0, key_prefix: typing.Optional[str] = None):
         self._address = redis_url
@@ -26,9 +29,7 @@ class Redis:
     async def redis(self):
         async with self._connection_lock:
             if self._redis is None or self._redis.closed:
-                self._redis = await aioredis.create_redis_pool(self._address,
-                                                               db=self._db,
-                                                               encoding='utf-8')
+                self._redis = await aioredis.create_redis_pool(self._address, db=self._db, encoding='utf-8')
         return self._redis
 
     async def close(self):
@@ -42,18 +43,36 @@ class Redis:
                 return await self._redis.wait_closed()
             return True
 
-    async def get_current(self, user: int, chat: int) -> typing.Optional[int]:
+    async def get_current(self, user: int, chat: int
+                          ) -> typing.Tuple[typing.Optional[int], typing.Optional[int]]:
         key = self.get_key(user, chat, self.STATE_KEY)
         redis = await self.redis()
-        current = await redis.get(key, encoding='utf-8')
-        if current is not None:
-            current = int(current)
-        return current
+        data = await redis.get(key, encoding='utf-8')
+        index = msg_id = None
+        if data:
+            index, msg_id = list(map(int, json.loads(data)))
+        return index, msg_id
 
-    async def set_current(self, user: int, chat: int, current: int):
+    async def get_current_msg_id(self, user: int, chat: int) -> typing.Optional[int]:
         key = self.get_key(user, chat, self.STATE_KEY)
         redis = await self.redis()
-        return await redis.set(key, current, expire=self._ttl)
+        data = await redis.get(key, encoding='utf-8')
+        msg_id = None
+        if data:
+            msg_id = json.loads(data)[1]
+            msg_id = int(msg_id)
+        return msg_id
+
+    async def remove_current(self, user: int, chat: int):
+        key = self.get_key(user, chat, self.STATE_KEY)
+        redis = await self.redis()
+        return await redis.delete(key)
+
+    async def set_current(self, user: int, chat: int, current: int, msg_id: int):
+        key = self.get_key(user, chat, self.STATE_KEY)
+        data = json.dumps([current, msg_id])
+        redis = await self.redis()
+        return await redis.set(key, data, expire=self._ttl)
 
     async def get_data(self, user: int, chat: int) -> dict:
         key = self.get_key(user, chat, self.DATA_KEY)
@@ -85,7 +104,7 @@ class Redis:
         data = json.dumps(data)
         return await redis.set(key, data, expire=self._ttl)
 
-    async def get_poll_info(self ,user: int, chat: int, current: int, ):
+    async def get_poll_info(self, user: int, chat: int, current: int, ):
         key = self.get_key(user, chat, current, self.POLL_KEY)
         redis = await self.redis()
         data = await redis.get(key, encoding='utf-8')
@@ -116,15 +135,28 @@ class Redis:
         await redis.delete(key)
         return history
 
-    async def delete(self, user: int, chat: int):
+    async def delete(self, user: int, chat: int) -> str:
         key_state = self.get_key(user, chat, self.STATE_KEY)
         key_data = self.get_key(user, chat, self.DATA_KEY)
         redis = await self.redis()
-        return await redis.delete(key_state, key_data)
+        data = await redis.get(key_data, encoding='utf-8')
+        await redis.delete(key_state, key_data)
+        return data
 
     async def reset_all(self):
         redis = await self.redis()
         return await redis.flushall()
+
+    async def get_row_for_user(self, user: int):
+        key = self.get_key(user, self.TABLE_ROW_KEY)
+        redis = await self.redis()
+        data = await redis.get(key)
+        return int(data)
+
+    async def set_row_for_user(self, user: int, row: int):
+        key = self.get_key(user, self.TABLE_ROW_KEY)
+        redis = await self.redis()
+        await redis.set(key, row, expire=self._ttl)
 
     async def set_from(self, form: typing.Dict):
         data = json.dumps(form)
@@ -138,4 +170,22 @@ class Redis:
             return json.loads(data)
         return data
 
+    async def get_token(self) -> typing.Optional[bytes]:
+        redis = await self.redis()
+        data = await redis.get('token_', encoding=None)
+        return data
 
+    async def set_token(self, token: bytes):
+        redis = await self.redis()
+        return await redis.set('token_', token)
+
+    async def set_user(self, user: int, value: int = 1):
+        redis = await self.redis()
+        key = self.get_key(user, self.USERS_KEY)
+        await redis.set(key, value)
+
+    async def user_exists(self, user):
+        redis = await self.redis()
+        key = self.get_key(user, self.USERS_KEY)
+        result = await redis.get(key)
+        return bool(result)
