@@ -140,8 +140,12 @@ class GoogleApi:
         await self.redis.set_row_for_user(user, int(row))
 
     @staticmethod
-    def body(*args) -> dict:
-        return {'values': [[arg for arg in args]]}
+    def body(*args, multi=False) -> dict:
+        if multi:
+            values = [[arg] for arg in args]
+        else:
+            values = [[arg for arg in args]]
+        return {'values': values}
 
     async def headers(self) -> dict:
         token = await self.__token()
@@ -164,6 +168,18 @@ class GoogleApi:
         stringify_data = ', '.join(data)
         headers = await self.headers()
         data = self.body(stringify_data)
+        params = {'valueInputOption': 'RAW'}
+        url = '{base}/values/{range}/'.format(base=self.spreadsheet_url, range=range_)
+        async with httpx.AsyncClient() as client:
+            response = await client.put(url, json=data, params=params, headers=headers)
+        return response
+
+    async def write_titles(self, titles: List[str]):
+        start = 'A1'
+        end = '{}1'.format(string.ascii_uppercase[len(titles)])
+        range_ = f'{start}:{end}'
+        headers = await self.headers()
+        data = self.body(*titles)
         params = {'valueInputOption': 'RAW'}
         url = '{base}/values/{range}/'.format(base=self.spreadsheet_url, range=range_)
         async with httpx.AsyncClient() as client:

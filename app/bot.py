@@ -32,6 +32,7 @@ class DreamBot:
     async def start(self):
         self.pool = Pool(await self.doc.get_data())
         await self.users.initialize()
+        await self.writer.write_titles(['id', 'дата/время'] + [self.pool[i].text for i in range(len(self.pool) - 1)])
         self.dispatcher.register_message_handler(self.welcome, commands=['start'])
         self.dispatcher.register_message_handler(self.message_handler)
         self.dispatcher.register_callback_query_handler(self.start_poll, StartPollFilter())
@@ -69,7 +70,10 @@ class DreamBot:
         msg_history = await self.storage.get_msg_history(user, chat)
         data = await self.storage.delete(user, chat)
         for msg_id in msg_history:
-            await query.bot.delete_message(chat, msg_id)
+            try:
+                await query.bot.delete_message(chat, msg_id)
+            except:
+                pass
         await query.bot.send_message(
             chat_id=chat,
             text='Вы можете поделиться еще одним сноведением',
