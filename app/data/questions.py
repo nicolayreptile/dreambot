@@ -1,13 +1,12 @@
-import re
 from collections import OrderedDict
 from typing import List, Optional, Union, Dict
+
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.ui import emoji
 from app.ui import inline_markup
 from . import consts
-
 
 Response = Union[types.Message, types.PollAnswer, types.InlineQuery, types.CallbackQuery]
 
@@ -62,7 +61,7 @@ class Poll(Base):
     text_template = '{0} {1}'
     min_poll_size = 2
     max_poll_size = 10
-    row_width = 2
+    row_width = 4
     max_len = 18
     r_pattern_main = r'POLL_([0-9]*)'
     r_pattern_option = r'OPTION_([0-9]*)'
@@ -74,16 +73,18 @@ class Poll(Base):
         self.text = self.template.format(text)
         self.help_text = help_text
         self.options = {}
-        max_len = max([len(option) for option in options])
-        self.row_width = self.row_width if max_len < self.max_len else 1
+        self.flat_options = {}
+
         for idx, option in enumerate(options):
             callback_data = self.callback_data_template.format(self.name, idx)
-            assert re.match(self.r_pattern_main, callback_data)
-            self.options[callback_data] = option
+            self.options[callback_data] = idx + 1
+            self.flat_options[callback_data] = option
+            self.text = f'{self.text}\n {idx + 1}. {option}'
         if has_other:
             callback_data = self.callback_data_template.format(self.name, len(options))
-            self.options[callback_data] = consts.OTHER
-        self.limit = len(options) // 4
+            self.options[callback_data] = self.flat_options[callback_data] = consts.OTHER
+            options.append(consts.OTHER)
+        self.limit = len(options) // 2
         self.help_text = help_text
         if not self.help_text:
             self.help_text = 'Выберите один или несколько вариантов ответа'
@@ -101,7 +102,7 @@ class Poll(Base):
             row = []
             for callback_data, option in row_options:
                 status = emoji.green_circle if options_status.get(callback_data) else emoji.white_circle
-                text = self.text_template.format(status, option)
+                text = self.text_template.format(status, str(option))
                 row += [InlineKeyboardButton(text=text, callback_data=callback_data)]
             buttons.append(row)
         nav_buttons = []
@@ -117,7 +118,8 @@ class Poll(Base):
 
         return InlineKeyboardMarkup(row_width=self.row_width, inline_keyboard=buttons)
 
-    def change_option_state(self, msg: types.CallbackQuery, callback_data_checked: str, status: bool) -> InlineKeyboardMarkup:
+    def change_option_state(self, msg: types.CallbackQuery, callback_data_checked: str,
+                            status: bool) -> InlineKeyboardMarkup:
         keyboard = msg.message.values['reply_markup']
         buttons: List[List[InlineKeyboardButton]] = keyboard.inline_keyboard
         for group in buttons:
@@ -182,14 +184,26 @@ class ButtonPoll(Base):
         self.text = self.template.format(text, help_text or '')
         self.name = 'POLL_{0}'.format(self.index)
         self.options = {}
-        buttons = []
-        if has_other:
-            options.append(consts.OTHER)
+        self.flat_options = {}
+        buttons = [[]]
         for i, option in enumerate(options):
-            key = 'option_{0}'.format(i)
-            btn = InlineKeyboardButton(text=option, callback_data=key)
-            self.options[key] = option
-            buttons.append([btn])
+            key = 'option_{0}'.format(i + 1)
+            btn = InlineKeyboardButton(text=str(i + 1) if len(options) > 5 else option, callback_data=key)
+            self.options[key] = i
+            self.flat_options[key] = option
+            self.text = f'{self.text}\n {i}. {option}'
+            if len(buttons[-1]) > 4:
+                buttons.append([btn])
+            else:
+                buttons[-1].append(btn)
+        if has_other:
+            key = 'option_{0}'.format(len(options) + 2)
+            btn = InlineKeyboardButton(text=consts.OTHER, callback_data=key)
+            if len(buttons[-1]) > 4:
+                buttons.append([btn])
+            else:
+                buttons[-1].append(btn)
+            options.append(consts.OTHER)
         if self.nav_panel:
             buttons.append(self.nav_panel)
         self.keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -218,7 +232,7 @@ class Pool:
             has_other = item.get('has_other_option')
             required = item.get('required', True)
             first_time_only = item.get('first_time_only', False)
-            if type_ in ('PARAGRAPH_TEXT', 'TEXT', ):
+            if type_ in ('PARAGRAPH_TEXT', 'TEXT',):
                 elem = Question(text, help_text, index, required, first_time_only)
             elif type_ == 'CHECKBOX':
                 elem = Poll(text, help_text, options, has_other, index, required, first_time_only)

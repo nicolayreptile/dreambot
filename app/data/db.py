@@ -1,10 +1,10 @@
-import typing
 import os
+import typing
+
 import asyncpg
 import dotenv
 
 from ..redis import Redis
-
 
 dotenv.load_dotenv()
 

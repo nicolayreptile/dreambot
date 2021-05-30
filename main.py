@@ -1,11 +1,11 @@
 import asyncio
-import os
 import logging
+import os
+
 import dotenv
 
 from app.bot import DreamBot
 from app.redis import Redis
-from app.data.db import Db
 
 dotenv.load_dotenv()
 logging.basicConfig(level=logging.DEBUG)

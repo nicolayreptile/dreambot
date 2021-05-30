@@ -1,14 +1,13 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from collections import namedtuple
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from . import emoji
-
 
 __InlineButton = namedtuple('InlineButton',
                             ['START_POLL', 'NEXT', 'SITE', 'END', 'PREVIOUS', 'SUBMIT', 'POLL_NEXT', 'POLL_PREVIOUS'])
 __InlineKeyboard = namedtuple('InlineKeyboard',
-                              ['START_POLL', 'END', 'FULL_NAV', 'FORWARD_NAV', 'BACK_NAV', 'NAV', 'POLL_NAV' ])
+                              ['START_POLL', 'END', 'FULL_NAV', 'FORWARD_NAV', 'BACK_NAV', 'NAV', 'POLL_NAV'])
 
 buttons = __InlineButton(
     START_POLL=InlineKeyboardButton(f'{emoji.writing_hand} Рассказать сон', callback_data='_start_poll'),

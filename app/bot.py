@@ -5,8 +5,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram import filters
 
 from .data import consts
+from .data.db import Users
 from .data.docs import Doc, GoogleApi
-from .data.db import Db, Users
 from .data.questions import Poll, Pool, Question, ButtonPoll
 from .filters import (
     EndPollFilter,
@@ -177,7 +177,7 @@ class DreamBot:
         poll = self.pool[current]
         if not isinstance(poll, Poll) or not msg_id == msg.message.message_id:
             return await msg.answer('Вы уже отвечали на этот вопрос')
-        answer = poll.options[msg.data]
+        answer = poll.flat_options[msg.data]
         poll_info = await self.storage.get_poll_info(user, chat, current)
         options_status = poll_info['options_status']
         status = options_status.get(msg.data, False)
@@ -204,7 +204,7 @@ class DreamBot:
         current, msg_id = await self.storage.get_current(user, chat)
         if not msg.message.message_id == msg_id:
             return await msg.answer('Вы уже отвечали на этот вопрос')
-        answer = self.pool[current].options[msg.data]
+        answer = self.pool[current].flat_options[msg.data]
         if answer == consts.OTHER:
             reply_msg = await self.send_other(chat, msg.bot)
             return await self.storage.update_msg_history(user, chat, reply_msg.message_id)

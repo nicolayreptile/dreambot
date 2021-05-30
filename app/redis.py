@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
-import typing
-import json
 import asyncio
+import json
+import typing
+
 import aioredis
 
 
@@ -17,7 +17,7 @@ class Redis:
         self._address = redis_url
         self._db = db
 
-        self._prefix = (key_prefix, )
+        self._prefix = (key_prefix,)
         self._loop = asyncio.get_event_loop()
         self._redis: typing.Optional[aioredis.RedisConnection] = None
         self._connection_lock = asyncio.Lock(loop=self._loop)
